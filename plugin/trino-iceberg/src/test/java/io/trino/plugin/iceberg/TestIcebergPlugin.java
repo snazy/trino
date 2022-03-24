@@ -120,6 +120,16 @@ public class TestIcebergPlugin
                         "hive.metastore-recording-path", "/tmp"),
                 new TestingConnectorContext()))
                 .hasMessageContaining("Configuration property 'hive.metastore-recording-path' was not used");
+
+        // recording with nessie
+        assertThatThrownBy(() -> factory.create(
+                "test",
+                Map.of(
+                        "iceberg.catalog.type", "nessie",
+                        "hive.metastore.nessie.region", "us-east-2",
+                        "hive.metastore-recording-path", "/tmp"),
+                new TestingConnectorContext()))
+                .hasMessageContaining("Configuration property 'hive.metastore-recording-path' was not used");
     }
 
     @Test
@@ -195,5 +205,30 @@ public class TestIcebergPlugin
     private static ConnectorFactory getConnectorFactory()
     {
         return getOnlyElement(new IcebergPlugin().getConnectorFactories());
+    }
+
+    @Test
+    public void testNessieMetastore()
+    {
+        ConnectorFactory factory = getConnectorFactory();
+
+        factory.create(
+                        "test",
+                        Map.of(
+                                "iceberg.catalog.type", "nessie",
+                                "iceberg.nessie.warehouse", "/tmp",
+                                "iceberg.nessie.uri", "http://localhost:19120"),
+                        new TestingConnectorContext())
+                .shutdown();
+
+        assertThatThrownBy(() -> factory.create(
+                "test",
+                Map.of(
+                        "iceberg.catalog.type", "nessie",
+                        "iceberg.nessie.catalogid", "123",
+                        "iceberg.nessie.warehouse", "/tmp",
+                        "iceberg.nessie.uri", "http://localhost:19120"),
+                new TestingConnectorContext()))
+                .hasMessageContaining("'iceberg.nessie.catalogid' was not used");
     }
 }
