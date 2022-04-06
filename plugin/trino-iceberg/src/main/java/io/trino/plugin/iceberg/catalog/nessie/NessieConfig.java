@@ -22,7 +22,7 @@ public class NessieConfig
 {
     private String defaultReferenceName = "main";
     private String serverUri;
-    private String warehouseDir;
+    private String defaultWarehouseDir;
 
     public String getDefaultReferenceName()
     {
@@ -51,16 +51,16 @@ public class NessieConfig
     }
 
     @NotEmpty
-    public String getWarehouseDir()
+    public String getDefaultWarehouseDir()
     {
-        return warehouseDir;
+        return defaultWarehouseDir;
     }
 
-    @Config("iceberg.nessie.warehouse")
+    @Config("iceberg.nessie.default-warehouse-dir")
     @ConfigDescription("The default warehouse to use for Nessie")
-    public NessieConfig setWarehouseDir(String warehouseDir)
+    public NessieConfig setDefaultWarehouseDir(String defaultWarehouseDir)
     {
-        this.warehouseDir = warehouseDir;
+        this.defaultWarehouseDir = defaultWarehouseDir;
         return this;
     }
 }

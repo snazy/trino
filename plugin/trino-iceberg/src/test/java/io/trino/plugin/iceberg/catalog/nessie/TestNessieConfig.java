@@ -11,10 +11,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.trino.plugin.iceberg;
+package io.trino.plugin.iceberg.catalog.nessie;
 
 import com.google.common.collect.ImmutableMap;
-import io.trino.plugin.iceberg.catalog.nessie.NessieConfig;
 import org.testng.annotations.Test;
 
 import java.util.Map;
@@ -29,7 +28,7 @@ public class TestNessieConfig
     public void testDefaults()
     {
         assertRecordedDefaults(recordDefaults(NessieConfig.class)
-                .setWarehouseDir(null)
+                .setDefaultWarehouseDir(null)
                 .setServerUri(null)
                 .setDefaultReferenceName("main"));
     }
@@ -41,13 +40,13 @@ public class TestNessieConfig
         String serverUri = "http://localhost:xxx/api/v1";
         String ref = "someRef";
         Map<String, String> properties = ImmutableMap.<String, String>builder()
-                .put("iceberg.nessie.warehouse", warehouseDir)
+                .put("iceberg.nessie.default-warehouse-dir", warehouseDir)
                 .put("iceberg.nessie.uri", serverUri)
                 .put("iceberg.nessie.ref", ref)
                 .buildOrThrow();
 
         NessieConfig expected = new NessieConfig()
-                .setWarehouseDir(warehouseDir)
+                .setDefaultWarehouseDir(warehouseDir)
                 .setServerUri(serverUri)
                 .setDefaultReferenceName(ref);
 

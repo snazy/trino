@@ -84,7 +84,11 @@ public class TrinoNessieCatalog
     public Map<String, Object> loadNamespaceMetadata(ConnectorSession session, String namespace)
     {
         nessieClient.loadNamespaceMetadata(namespace);
-        return propertiesByNamespace.get(namespace);
+        Map<String, Object> properties = propertiesByNamespace.get(namespace);
+        if (null == properties) {
+            return ImmutableMap.of();
+        }
+        return properties;
     }
 
     @Override
@@ -115,7 +119,6 @@ public class TrinoNessieCatalog
     @Override
     public List<SchemaTableName> listTables(ConnectorSession session, Optional<String> namespace)
     {
-        nessieClient.refreshReference();
         return nessieClient.listTables(namespace);
     }
 
@@ -190,7 +193,7 @@ public class TrinoNessieCatalog
 
         Path location;
         if (databaseLocation == null) {
-            String schemaDirectoryName = schemaTableName.getSchemaName() + ".db";
+            String schemaDirectoryName = schemaTableName.getSchemaName();
             location = new Path(new Path(warehouseLocation, schemaDirectoryName), tableName);
         }
         else {

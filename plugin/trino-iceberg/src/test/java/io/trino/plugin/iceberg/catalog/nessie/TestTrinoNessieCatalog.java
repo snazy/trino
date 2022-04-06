@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.trino.plugin.iceberg;
+package io.trino.plugin.iceberg.catalog.nessie;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -20,11 +20,9 @@ import io.trino.plugin.hive.HdfsConfigurationInitializer;
 import io.trino.plugin.hive.HdfsEnvironment;
 import io.trino.plugin.hive.HiveHdfsConfiguration;
 import io.trino.plugin.hive.authentication.NoHdfsAuthentication;
+import io.trino.plugin.iceberg.BaseTrinoCatalogTest;
+import io.trino.plugin.iceberg.HdfsFileIoProvider;
 import io.trino.plugin.iceberg.catalog.TrinoCatalog;
-import io.trino.plugin.iceberg.catalog.nessie.NessieConfig;
-import io.trino.plugin.iceberg.catalog.nessie.NessieIcebergClient;
-import io.trino.plugin.iceberg.catalog.nessie.NessieIcebergTableOperationsProvider;
-import io.trino.plugin.iceberg.catalog.nessie.TrinoNessieCatalog;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.security.PrincipalType;
 import io.trino.spi.security.TrinoPrincipal;
@@ -32,7 +30,6 @@ import io.trino.testing.containers.NessieContainer;
 import org.assertj.core.api.Assertions;
 import org.projectnessie.client.api.NessieApiV1;
 import org.projectnessie.client.http.HttpClientBuilder;
-import org.testcontainers.containers.Network;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
@@ -46,26 +43,22 @@ import static io.trino.testing.TestingConnectorSession.SESSION;
 import static io.trino.testing.sql.TestTable.randomTableSuffix;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.testcontainers.containers.Network.newNetwork;
 
 public class TestTrinoNessieCatalog
         extends BaseTrinoCatalogTest
 {
     private static NessieContainer nessieContainer;
-    private static Network network;
 
     @BeforeClass
     public static void setupServer()
     {
-        network = newNetwork();
-        nessieContainer = NessieContainer.builder().withNetwork(network).build();
+        nessieContainer = NessieContainer.builder().build();
         nessieContainer.start();
     }
 
     @AfterClass
     public static void teardownServer()
     {
-        network.close();
         nessieContainer.close();
     }
 
@@ -113,7 +106,7 @@ public class TestTrinoNessieCatalog
                 new HdfsConfig(),
                 new NoHdfsAuthentication());
         NessieConfig nessieConfig = new NessieConfig();
-        nessieConfig.setWarehouseDir(tmpDirectory.toAbsolutePath().toString());
+        nessieConfig.setDefaultWarehouseDir(tmpDirectory.toAbsolutePath().toString());
         nessieConfig.setServerUri(nessieContainer.getRestApiUri());
         NessieApiV1 nessieApi = HttpClientBuilder.builder().withUri(nessieContainer.getRestApiUri())
                 .build(NessieApiV1.class);
@@ -121,7 +114,7 @@ public class TestTrinoNessieCatalog
         TrinoCatalog catalogWithDefaultLocation = new TrinoNessieCatalog(
                 new NessieIcebergTableOperationsProvider(new HdfsFileIoProvider(hdfsEnvironment), nessieClient),
                 nessieClient,
-                nessieConfig.getWarehouseDir(),
+                nessieConfig.getDefaultWarehouseDir(),
                 "testVersion",
                 false);
 
@@ -131,7 +124,7 @@ public class TestTrinoNessieCatalog
         catalogWithDefaultLocation.createNamespace(SESSION, namespace, ImmutableMap.of(),
                 new TrinoPrincipal(PrincipalType.USER, SESSION.getUser()));
         try {
-            File expectedSchemaDirectory = new File(tmpDirectory.toFile(), namespace + ".db");
+            File expectedSchemaDirectory = new File(tmpDirectory.toFile(), namespace);
             File expectedTableDirectory = new File(expectedSchemaDirectory,
                     schemaTableName.getTableName());
             assertThat(catalogWithDefaultLocation.defaultTableLocation(SESSION,

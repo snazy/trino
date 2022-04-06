@@ -17,17 +17,15 @@ import io.trino.spi.connector.SchemaTableName;
 import org.projectnessie.model.CommitMeta;
 import org.projectnessie.model.ContentKey;
 import org.projectnessie.model.ImmutableCommitMeta;
+import org.projectnessie.model.Namespace;
 
 final class NessieIcebergUtil
 {
-    private NessieIcebergUtil()
-    {
-    }
+    private NessieIcebergUtil() {}
 
     static ContentKey toKey(SchemaTableName tableName)
     {
-        return ContentKey.of(org.projectnessie.model.Namespace.parse(tableName.getSchemaName()),
-                tableName.getTableName());
+        return ContentKey.of(Namespace.parse(tableName.getSchemaName()), tableName.getTableName());
     }
 
     static ImmutableCommitMeta buildCommitMeta(String author, String commitMsg)

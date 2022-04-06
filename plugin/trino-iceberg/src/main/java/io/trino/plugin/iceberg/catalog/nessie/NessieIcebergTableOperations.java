@@ -66,7 +66,7 @@ public class NessieIcebergTableOperations
     @Override
     protected void commitNewTable(TableMetadata metadata)
     {
-        nessieClient.getRef().checkMutable();
+        nessieClient.getReference().checkMutable();
         verify(version == -1, "commitNewTable called on a table which already exists");
         nessieClient.commitTable(metadata, new SchemaTableName(database, this.tableName), writeNewMetadata(metadata, 0), session.getUser());
         shouldRefresh = true;

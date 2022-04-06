@@ -11,13 +11,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.trino.plugin.iceberg;
+package io.trino.plugin.iceberg.catalog.nessie;
 
 import com.google.common.collect.ImmutableMap;
+import io.trino.plugin.iceberg.BaseIcebergConnectorSmokeTest;
+import io.trino.plugin.iceberg.IcebergQueryRunner;
+import io.trino.plugin.iceberg.SchemaInitializer;
 import io.trino.testing.QueryRunner;
+import io.trino.testing.TestingConnectorBehavior;
 import io.trino.testing.containers.NessieContainer;
-import org.apache.iceberg.FileFormat;
-import org.testcontainers.containers.Network;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
@@ -25,22 +27,22 @@ import org.testng.annotations.Test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 
 import static com.google.common.io.MoreFiles.deleteRecursively;
-import static org.assertj.core.api.Assertions.assertThat;
+import static com.google.common.io.RecursiveDeleteOption.ALLOW_INSECURE;
+import static org.apache.iceberg.FileFormat.PARQUET;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.testcontainers.containers.Network.newNetwork;
 
 public class TestIcebergNessieCatalogConnectorSmokeTest
         extends BaseIcebergConnectorSmokeTest
 {
     private static NessieContainer nessieContainer;
-    private static Network network;
     private static Path tempDir;
 
     public TestIcebergNessieCatalogConnectorSmokeTest()
     {
-        super(FileFormat.PARQUET);
+        super(PARQUET);
     }
 
     @BeforeClass
@@ -48,8 +50,7 @@ public class TestIcebergNessieCatalogConnectorSmokeTest
     public void init()
             throws Exception
     {
-        network = newNetwork();
-        nessieContainer = NessieContainer.builder().withNetwork(network).build();
+        nessieContainer = closeAfterClass(NessieContainer.builder().build());
         nessieContainer.start();
         tempDir = Files.createTempDirectory("test_trino_nessie_catalog");
         super.init();
@@ -59,9 +60,7 @@ public class TestIcebergNessieCatalogConnectorSmokeTest
     public void teardown()
             throws IOException
     {
-        network.close();
-        nessieContainer.close();
-        deleteRecursively(tempDir);
+        deleteRecursively(tempDir, ALLOW_INSECURE);
     }
 
     @Override
@@ -69,11 +68,13 @@ public class TestIcebergNessieCatalogConnectorSmokeTest
             throws Exception
     {
         return IcebergQueryRunner.builder()
+                .setBaseDataDir(Optional.of(tempDir))
                 .setIcebergProperties(
                         ImmutableMap.of(
+                                "iceberg.file-format", PARQUET.name(),
                                 "iceberg.catalog.type", "nessie",
                                 "iceberg.nessie.uri", nessieContainer.getRestApiUri(),
-                                "iceberg.nessie.warehouse", tempDir.toString()))
+                                "iceberg.nessie.default-warehouse-dir", tempDir.toString()))
                 .setSchemaInitializer(
                         SchemaInitializer.builder()
                                 .withClonedTpchTables(REQUIRED_TPCH_TABLES)
@@ -81,24 +82,16 @@ public class TestIcebergNessieCatalogConnectorSmokeTest
                 .build();
     }
 
-    @Test
     @Override
-    public void testShowCreateTable()
+    protected boolean hasBehavior(TestingConnectorBehavior connectorBehavior)
     {
-        String schemaName = getSession().getSchema().orElseThrow();
-        assertThat((String) computeScalar("SHOW CREATE TABLE region"))
-                .isEqualTo(String.format("" +
-                                "CREATE TABLE iceberg.%1$s.region (\n" +
-                                "   regionkey bigint,\n" +
-                                "   name varchar,\n" +
-                                "   comment varchar\n" +
-                                ")\n" +
-                                "WITH (\n" +
-                                "   format = 'ORC',\n" +
-                                "   location = '%2$s/%1$s.db/region'\n" +
-                                ")",
-                        schemaName,
-                        tempDir.toString()));
+        switch (connectorBehavior) {
+            case SUPPORTS_CREATE_VIEW:
+            case SUPPORTS_CREATE_MATERIALIZED_VIEW:
+                return false;
+            default:
+                return super.hasBehavior(connectorBehavior);
+        }
     }
 
     @Test

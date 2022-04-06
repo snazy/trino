@@ -40,11 +40,10 @@ public class TrinoNessieCatalogFactory
             NodeVersion nodeVersion,
             IcebergConfig icebergConfig)
     {
-        this.tableOperationsProvider = requireNonNull(tableOperationsProvider,
-                "tableOperationsProvider is null");
+        this.tableOperationsProvider = requireNonNull(tableOperationsProvider, "tableOperationsProvider is null");
         this.trinoVersion = requireNonNull(nodeVersion, "nodeVersion is null").toString();
         this.nessieClient = requireNonNull(nessieClient, "nessieClient is null");
-        this.warehouseLocation = nessieClient.getConfig().getWarehouseDir();
+        this.warehouseLocation = nessieClient.getConfig().getDefaultWarehouseDir();
         requireNonNull(icebergConfig, "icebergConfig is null");
         this.isUniqueTableLocation = icebergConfig.isUniqueTableLocation();
     }

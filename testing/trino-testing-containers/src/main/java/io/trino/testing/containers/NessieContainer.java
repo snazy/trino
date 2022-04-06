@@ -69,7 +69,7 @@ public class NessieContainer
             this.image = DEFAULT_IMAGE;
             this.hostName = DEFAULT_HOST_NAME;
             this.exposePorts = ImmutableSet.of(PORT);
-            this.envVars = ImmutableMap.of("QUARKUS_HTTP_PORT", "" + PORT, "NESSIE_VERSION_STORE_TYPE", VERSION_STORE_TYPE);
+            this.envVars = ImmutableMap.of("QUARKUS_HTTP_PORT", String.valueOf(PORT), "NESSIE_VERSION_STORE_TYPE", VERSION_STORE_TYPE);
         }
 
         @Override

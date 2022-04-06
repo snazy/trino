@@ -43,17 +43,18 @@ import org.projectnessie.model.Reference;
 import org.projectnessie.model.Tag;
 
 import javax.annotation.Nullable;
-import javax.inject.Provider;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
+import static com.google.common.collect.ImmutableList.toImmutableList;
 import static io.trino.plugin.iceberg.IcebergErrorCode.ICEBERG_CATALOG_ERROR;
 import static io.trino.plugin.iceberg.IcebergErrorCode.ICEBERG_COMMIT_ERROR;
 import static io.trino.plugin.iceberg.catalog.nessie.NessieIcebergUtil.buildCommitMeta;
@@ -64,17 +65,17 @@ import static java.util.Objects.requireNonNull;
 public class NessieIcebergClient
 {
     private final NessieApiV1 nessieApi;
-    private final Provider<UpdateableReference> reference;
+    private final Supplier<UpdateableReference> reference;
     private final NessieConfig config;
 
     public NessieIcebergClient(NessieApiV1 nessieApi, NessieConfig config)
     {
         this.nessieApi = requireNonNull(nessieApi, "nessieApi is null");
         this.config = requireNonNull(config, "nessieConfig is null");
-        this.reference = () -> loadReference(config.getDefaultReferenceName(), null);
+        this.reference = () -> loadReference(Optional.ofNullable(config.getDefaultReferenceName()), null);
     }
 
-    public UpdateableReference getRef()
+    public UpdateableReference getReference()
     {
         return reference.get();
     }
@@ -92,16 +93,12 @@ public class NessieIcebergClient
     public List<SchemaTableName> listTables(Optional<String> namespace)
     {
         try {
-            return nessieApi.getEntries()
-                    .reference(getRef().getReference())
-                    .get()
-                    .getEntries()
-                    .stream()
+            return nessieApi.getEntries().reference(getReference().getReference())
+                    .get().getEntries().stream()
                     .filter(namespacePredicate(namespace))
-                    .filter(e -> Content.Type.ICEBERG_TABLE == e.getType())
-                    .map(e -> new SchemaTableName(e.getName().getNamespace().name(),
-                            e.getName().getName()))
-                    .collect(Collectors.toList());
+                    .filter(entry -> entry.getType() == Content.Type.ICEBERG_TABLE)
+                    .map(entry -> new SchemaTableName(entry.getName().getNamespace().name(), entry.getName().getName()))
+                    .collect(toImmutableList());
         }
         catch (NessieNotFoundException ex) {
             throw new TrinoException(ICEBERG_CATALOG_ERROR, ex);
@@ -113,7 +110,7 @@ public class NessieIcebergClient
     {
         try {
             ContentKey key = NessieIcebergUtil.toKey(schemaTableName);
-            Content table = nessieApi.getContent().key(key).reference(getRef().getReference())
+            Content table = nessieApi.getContent().key(key).reference(getReference().getReference())
                     .get().get(key);
             return table != null ? table.unwrap(IcebergTable.class).orElse(null) : null;
         }
@@ -122,18 +119,17 @@ public class NessieIcebergClient
         }
     }
 
-    private Predicate<EntriesResponse.Entry> namespacePredicate(Optional<String> namespace)
+    private static Predicate<EntriesResponse.Entry> namespacePredicate(Optional<String> namespace)
     {
         return namespace.<Predicate<EntriesResponse.Entry>>map(
-                ns -> entry -> org.projectnessie.model.Namespace.parse(ns)
-                        .equals(entry.getName().getNamespace())).orElseGet(() -> e -> true);
+                ns -> entry -> Namespace.parse(ns).equals(entry.getName().getNamespace())).orElseGet(() -> e -> true);
     }
 
-    private UpdateableReference loadReference(String requestedRef, String hash)
+    private UpdateableReference loadReference(Optional<String> requestedRef, String hash)
     {
         try {
-            Reference ref = requestedRef == null ? nessieApi.getDefaultBranch()
-                    : nessieApi.getReference().refName(requestedRef).get();
+            Reference ref = requestedRef.isEmpty() ? nessieApi.getDefaultBranch()
+                    : nessieApi.getReference().refName(requestedRef.get()).get();
             if (hash != null) {
                 if (ref instanceof Branch) {
                     ref = Branch.of(ref.getName(), hash);
@@ -145,24 +141,22 @@ public class NessieIcebergClient
             return new UpdateableReference(ref, hash != null);
         }
         catch (NessieNotFoundException ex) {
-            if (requestedRef != null) {
+            if (requestedRef.isPresent()) {
                 throw new TrinoException(ICEBERG_CATALOG_ERROR, format("Nessie ref '%s' does not exist. This ref must exist before creating a NessieCatalog.", requestedRef), ex);
             }
 
-            throw new TrinoException(ICEBERG_CATALOG_ERROR,
-                    "Nessie does not have an existing default branch." +
-                            "Either configure an alternative ref via 'iceberg.nessie.ref' or create the default branch on the server.",
-                    ex);
+            throw new TrinoException(ICEBERG_CATALOG_ERROR, "Nessie does not have an existing default branch." +
+                    "Either configure an alternative ref via 'iceberg.nessie.ref' or create the default branch on the server.", ex);
         }
     }
 
     public void refreshReference()
     {
         try {
-            getRef().refresh(nessieApi);
+            getReference().refresh(nessieApi);
         }
         catch (NessieNotFoundException e) {
-            throw new TrinoException(ICEBERG_CATALOG_ERROR, format("Failed to refresh as ref '%s' is no longer valid.", getRef().getName()), e);
+            throw new TrinoException(ICEBERG_CATALOG_ERROR, format("Failed to refresh as ref '%s' is no longer valid.", getReference().getName()), e);
         }
     }
 
@@ -170,23 +164,22 @@ public class NessieIcebergClient
     {
         try {
             return getNessieApi().getMultipleNamespaces()
-                    .refName(getRef().getName())
+                    .refName(getReference().getName())
                     .get().getNamespaces().stream()
                     .map(Namespace::name)
                     .collect(Collectors.toList());
         }
         catch (NessieReferenceNotFoundException e) {
-            throw new TrinoException(ICEBERG_CATALOG_ERROR,
-                    "Cannot list Namespaces: ref is no longer valid", e);
+            throw new TrinoException(ICEBERG_CATALOG_ERROR, "Cannot list Namespaces: ref is no longer valid", e);
         }
     }
 
     public void createNamespace(String namespace)
     {
         try {
-            getRef().checkMutable();
+            getReference().checkMutable();
             getNessieApi().createNamespace()
-                    .refName(getRef().getName())
+                    .refName(getReference().getName())
                     .namespace(namespace)
                     .create();
             refreshReference();
@@ -195,18 +188,16 @@ public class NessieIcebergClient
             throw new SchemaAlreadyExistsException(namespace);
         }
         catch (NessieReferenceNotFoundException e) {
-            throw new TrinoException(ICEBERG_CATALOG_ERROR,
-                    format("Cannot create Namespace '%s': ref is no longer valid",
-                            namespace), e);
+            throw new TrinoException(ICEBERG_CATALOG_ERROR, format("Cannot create Namespace '%s': ref is no longer valid", namespace), e);
         }
     }
 
     public void dropNamespace(String namespace)
     {
         try {
-            getRef().checkMutable();
+            getReference().checkMutable();
             getNessieApi().deleteNamespace()
-                    .refName(getRef().getName())
+                    .refName(getReference().getName())
                     .namespace(namespace)
                     .delete();
             refreshReference();
@@ -215,13 +206,10 @@ public class NessieIcebergClient
             throw new SchemaNotFoundException(namespace);
         }
         catch (NessieReferenceNotFoundException e) {
-            throw new TrinoException(ICEBERG_CATALOG_ERROR,
-                    format("Cannot drop Namespace '%s': ref is no longer valid", namespace),
-                    e);
+            throw new TrinoException(ICEBERG_CATALOG_ERROR, format("Cannot drop Namespace '%s': ref is no longer valid", namespace), e);
         }
         catch (NessieNamespaceNotEmptyException e) {
-            throw new TrinoException(ICEBERG_CATALOG_ERROR, format(
-                    "Namespace '%s' is not empty. One or more tables exist", namespace), e);
+            throw new TrinoException(ICEBERG_CATALOG_ERROR, format("Namespace '%s' is not empty. One or more tables exist", namespace), e);
         }
     }
 
@@ -229,7 +217,7 @@ public class NessieIcebergClient
     {
         try {
             getNessieApi().getNamespace()
-                    .refName(getRef().getName())
+                    .refName(getReference().getName())
                     .namespace(namespace)
                     .get();
         }
@@ -247,7 +235,7 @@ public class NessieIcebergClient
 
     public void dropTable(SchemaTableName schemaTableName, String user)
     {
-        getRef().checkMutable();
+        getReference().checkMutable();
 
         IcebergTable existingTable = loadTable(schemaTableName);
         if (existingTable == null) {
@@ -267,18 +255,18 @@ public class NessieIcebergClient
                     .onFailure((o, exception) -> refreshReference())
                     .run(commitBuilder -> {
                         Branch branch = commitBuilder
-                                .branch(getRef().getAsBranch())
+                                .branch(getReference().getAsBranch())
                                 .commit();
-                        getRef().updateReference(branch);
+                        getReference().updateReference(branch);
                     }, BaseNessieClientServerException.class);
         }
         catch (NessieConflictException e) {
             throw new TrinoException(ICEBERG_CATALOG_ERROR,
-                    format("Cannot drop table '%s': failed after retry (update ref '%s' and retry)", schemaTableName, getRef().getName()), e);
+                    format("Cannot drop table '%s': failed after retry (update ref '%s' and retry)", schemaTableName, getReference().getName()), e);
         }
         catch (NessieNotFoundException e) {
             throw new TrinoException(ICEBERG_CATALOG_ERROR,
-                    format("Cannot drop table '%s': ref '%s' no longer exists", schemaTableName, getRef().getName()), e);
+                    format("Cannot drop table '%s': ref '%s' no longer exists", schemaTableName, getReference().getName()), e);
         }
         catch (BaseNessieClientServerException e) {
             throw new TrinoException(ICEBERG_CATALOG_ERROR, format("Cannot drop table '%s': unknown error", schemaTableName), e);
@@ -287,7 +275,7 @@ public class NessieIcebergClient
 
     public void renameTable(SchemaTableName from, SchemaTableName to, String user)
     {
-        getRef().checkMutable();
+        getReference().checkMutable();
 
         IcebergTable existingFromTable = loadTable(from);
         if (existingFromTable == null) {
@@ -312,18 +300,18 @@ public class NessieIcebergClient
                     .onFailure((o, exception) -> refreshReference())
                     .run(ops -> {
                         Branch branch = ops
-                                .branch(getRef().getAsBranch())
+                                .branch(getReference().getAsBranch())
                                 .commit();
-                        getRef().updateReference(branch);
+                        getReference().updateReference(branch);
                     }, BaseNessieClientServerException.class);
         }
         catch (NessieNotFoundException e) {
             throw new TrinoException(ICEBERG_CATALOG_ERROR,
-                    format("Cannot rename table '%s' to '%s': ref '%s' no longer exists", from.getTableName(), to.getTableName(), getRef().getName()), e);
+                    format("Cannot rename table '%s' to '%s': ref '%s' no longer exists", from.getTableName(), to.getTableName(), getReference().getName()), e);
         }
         catch (BaseNessieClientServerException e) {
             throw new TrinoException(ICEBERG_CATALOG_ERROR,
-                    format("Cannot rename table '%s' to '%s': ref '%s' is not up to date", from.getTableName(), to.getTableName(), getRef().getName()), e);
+                    format("Cannot rename table '%s' to '%s': ref '%s' is not up to date", from.getTableName(), to.getTableName(), getReference().getName()), e);
         }
         catch (HttpClientException ex) {
             throw new TrinoException(ICEBERG_CATALOG_ERROR, ex);
@@ -332,7 +320,7 @@ public class NessieIcebergClient
 
     public void commitTable(TableMetadata metadata, SchemaTableName tableName, String metadataLocation, String user)
     {
-        getRef().checkMutable();
+        getReference().checkMutable();
         try {
             ImmutableIcebergTable.Builder newTableBuilder = ImmutableIcebergTable.builder();
             Snapshot snapshot = metadata.currentSnapshot();
@@ -347,22 +335,16 @@ public class NessieIcebergClient
 
             Branch branch = getNessieApi().commitMultipleOperations()
                     .operation(Operation.Put.of(NessieIcebergUtil.toKey(tableName), newTable))
-                    .commitMeta(
-                            buildCommitMeta(user, format("Trino Iceberg add table %s",
-                                    tableName)))
-                    .branch(getRef().getAsBranch())
+                    .commitMeta(buildCommitMeta(user, format("Trino Iceberg add table %s", tableName)))
+                    .branch(getReference().getAsBranch())
                     .commit();
-            getRef().updateReference(branch);
+            getReference().updateReference(branch);
         }
         catch (NessieNotFoundException e) {
-            throw new TrinoException(ICEBERG_COMMIT_ERROR,
-                    format("Cannot commit: ref '%s' no longer exists",
-                            getRef().getName()), e);
+            throw new TrinoException(ICEBERG_COMMIT_ERROR, format("Cannot commit: ref '%s' no longer exists", getReference().getName()), e);
         }
         catch (NessieConflictException e) {
-            throw new TrinoException(ICEBERG_COMMIT_ERROR,
-                    format("Cannot commit: ref hash is out of date. " +
-                            "Update the ref '%s' and try again", getRef().getName()), e);
+            throw new TrinoException(ICEBERG_COMMIT_ERROR, format("Cannot commit: ref hash is out of date. Update the ref '%s' and try again", getReference().getName()), e);
         }
     }
 
@@ -429,8 +411,7 @@ public class NessieIcebergClient
 
         public void checkMutable()
         {
-            checkArgument(mutable,
-                    "You can only mutate tables when using a branch without a hash or timestamp.");
+            checkArgument(mutable, "You can only mutate tables when using a branch without a hash or timestamp.");
         }
 
         public String getName()
