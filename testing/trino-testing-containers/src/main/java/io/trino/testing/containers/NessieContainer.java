@@ -15,7 +15,6 @@ package io.trino.testing.containers;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.net.HostAndPort;
 import io.airlift.log.Logger;
 import org.testcontainers.containers.Network;
 
@@ -51,14 +50,9 @@ public class NessieContainer
         log.info("Nessie server container started with address for REST API: %s", getRestApiUri());
     }
 
-    public HostAndPort getHostAndPort()
-    {
-        return getMappedHostAndPortForExposedPort(PORT);
-    }
-
     public String getRestApiUri()
     {
-        return "http://" + getHostAndPort() + "/api/v1";
+        return "http://" + getMappedHostAndPortForExposedPort(PORT) + "/api/v1";
     }
 
     public static class Builder

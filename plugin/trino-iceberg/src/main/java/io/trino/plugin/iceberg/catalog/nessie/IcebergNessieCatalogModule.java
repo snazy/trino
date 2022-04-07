@@ -14,15 +14,14 @@
 package io.trino.plugin.iceberg.catalog.nessie;
 
 import com.google.inject.Binder;
-import com.google.inject.Inject;
+import com.google.inject.Provides;
 import com.google.inject.Scopes;
+import com.google.inject.Singleton;
 import io.airlift.configuration.AbstractConfigurationAwareModule;
 import io.trino.plugin.iceberg.catalog.IcebergTableOperationsProvider;
 import io.trino.plugin.iceberg.catalog.TrinoCatalogFactory;
 import org.projectnessie.client.api.NessieApiV1;
 import org.projectnessie.client.http.HttpClientBuilder;
-
-import javax.inject.Provider;
 
 import static io.airlift.configuration.ConfigBinder.configBinder;
 import static org.weakref.jmx.guice.ExportBinder.newExporter;
@@ -34,32 +33,20 @@ public class IcebergNessieCatalogModule
     protected void setup(Binder binder)
     {
         configBinder(binder).bindConfig(NessieConfig.class);
-        binder.bind(NessieIcebergClient.class).toProvider(NessieIcebergClientProvider.class).in(Scopes.SINGLETON);
         binder.bind(IcebergTableOperationsProvider.class).to(NessieIcebergTableOperationsProvider.class).in(Scopes.SINGLETON);
         newExporter(binder).export(IcebergTableOperationsProvider.class).withGeneratedName();
         binder.bind(TrinoCatalogFactory.class).to(TrinoNessieCatalogFactory.class).in(Scopes.SINGLETON);
         newExporter(binder).export(TrinoCatalogFactory.class).withGeneratedName();
     }
 
-    public static class NessieIcebergClientProvider
-            implements Provider<NessieIcebergClient>
+    @Provides
+    @Singleton
+    public static NessieIcebergClient createNessieIcebergClient(NessieConfig nessieConfig)
     {
-        private final NessieConfig nessieConfig;
-
-        @Inject
-        public NessieIcebergClientProvider(NessieConfig nessieConfig)
-        {
-            this.nessieConfig = nessieConfig;
-        }
-
-        @Override
-        public NessieIcebergClient get()
-        {
-            return new NessieIcebergClient(
-                    HttpClientBuilder.builder()
-                            .withUri(nessieConfig.getServerUri())
-                            .build(NessieApiV1.class),
-                    nessieConfig);
-        }
+        return new NessieIcebergClient(
+                HttpClientBuilder.builder()
+                        .withUri(nessieConfig.getServerUri())
+                        .build(NessieApiV1.class),
+                nessieConfig);
     }
 }

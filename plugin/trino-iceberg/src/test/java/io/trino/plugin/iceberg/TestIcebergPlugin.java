@@ -220,15 +220,5 @@ public class TestIcebergPlugin
                                 "iceberg.nessie.uri", "http://foo:1234"),
                         new TestingConnectorContext())
                 .shutdown();
-
-        assertThatThrownBy(() -> factory.create(
-                "test",
-                Map.of(
-                        "iceberg.catalog.type", "nessie",
-                        "iceberg.nessie.catalogid", "123",
-                        "iceberg.nessie.default-warehouse-dir", "/tmp",
-                        "iceberg.nessie.uri", "http://foo:1234"),
-                new TestingConnectorContext()))
-                .hasMessageContaining("Error: Configuration property 'iceberg.nessie.catalogid' was not used");
     }
 }

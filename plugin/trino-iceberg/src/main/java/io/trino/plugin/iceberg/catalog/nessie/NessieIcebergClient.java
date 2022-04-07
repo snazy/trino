@@ -130,6 +130,7 @@ public class NessieIcebergClient
         try {
             Reference ref = requestedRef.isEmpty() ? nessieApi.getDefaultBranch()
                     : nessieApi.getReference().refName(requestedRef.get()).get();
+            // hash is currently always null, but a user will eventually be able to specify a particular branch/tag with a given hash to operate on
             if (hash != null) {
                 if (ref instanceof Branch) {
                     ref = Branch.of(ref.getName(), hash);

@@ -36,19 +36,16 @@ public class TestNessieConfig
     @Test
     public void testExplicitPropertyMapping()
     {
-        String warehouseDir = "/tmp";
-        String serverUri = "http://localhost:xxx/api/v1";
-        String ref = "someRef";
         Map<String, String> properties = ImmutableMap.<String, String>builder()
-                .put("iceberg.nessie.default-warehouse-dir", warehouseDir)
-                .put("iceberg.nessie.uri", serverUri)
-                .put("iceberg.nessie.ref", ref)
+                .put("iceberg.nessie.default-warehouse-dir", "/tmp")
+                .put("iceberg.nessie.uri", "http://localhost:xxx/api/v1")
+                .put("iceberg.nessie.ref", "someRef")
                 .buildOrThrow();
 
         NessieConfig expected = new NessieConfig()
-                .setDefaultWarehouseDir(warehouseDir)
-                .setServerUri(serverUri)
-                .setDefaultReferenceName(ref);
+                .setDefaultWarehouseDir("/tmp")
+                .setServerUri("http://localhost:xxx/api/v1")
+                .setDefaultReferenceName("someRef");
 
         assertFullMapping(properties, expected);
     }
