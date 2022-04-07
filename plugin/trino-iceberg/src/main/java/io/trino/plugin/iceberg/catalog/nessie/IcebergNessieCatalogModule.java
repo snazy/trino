@@ -35,50 +35,31 @@ public class IcebergNessieCatalogModule
     {
         configBinder(binder).bindConfig(NessieConfig.class);
         binder.bind(NessieIcebergClient.class).toProvider(NessieIcebergClientProvider.class).in(Scopes.SINGLETON);
-        binder.bind(NessieApiV1.class).toProvider(NessieApiProvider.class).in(Scopes.SINGLETON);
         binder.bind(IcebergTableOperationsProvider.class).to(NessieIcebergTableOperationsProvider.class).in(Scopes.SINGLETON);
         newExporter(binder).export(IcebergTableOperationsProvider.class).withGeneratedName();
         binder.bind(TrinoCatalogFactory.class).to(TrinoNessieCatalogFactory.class).in(Scopes.SINGLETON);
         newExporter(binder).export(TrinoCatalogFactory.class).withGeneratedName();
     }
 
-    public static class NessieApiProvider
-            implements Provider<NessieApiV1>
-    {
-        private final NessieConfig nessieConfig;
-
-        @Inject
-        public NessieApiProvider(NessieConfig nessieConfig)
-        {
-            this.nessieConfig = nessieConfig;
-        }
-
-        @Override
-        public NessieApiV1 get()
-        {
-            return HttpClientBuilder.builder()
-                    .withUri(nessieConfig.getServerUri())
-                    .build(NessieApiV1.class);
-        }
-    }
-
     public static class NessieIcebergClientProvider
             implements Provider<NessieIcebergClient>
     {
-        private final NessieApiV1 nessieApi;
         private final NessieConfig nessieConfig;
 
         @Inject
-        public NessieIcebergClientProvider(NessieApiV1 nessieApi, NessieConfig nessieConfig)
+        public NessieIcebergClientProvider(NessieConfig nessieConfig)
         {
-            this.nessieApi = nessieApi;
             this.nessieConfig = nessieConfig;
         }
 
         @Override
         public NessieIcebergClient get()
         {
-            return new NessieIcebergClient(nessieApi, nessieConfig);
+            return new NessieIcebergClient(
+                    HttpClientBuilder.builder()
+                            .withUri(nessieConfig.getServerUri())
+                            .build(NessieApiV1.class),
+                    nessieConfig);
         }
     }
 }
