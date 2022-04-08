@@ -56,7 +56,7 @@ public class NessieIcebergTableOperations
     {
         IcebergTable table = nessieClient.loadTable(new SchemaTableName(database, tableName));
 
-        if (null == table) {
+        if (table == null) {
             throw new TableNotFoundException(getSchemaTableName());
         }
 

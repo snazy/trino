@@ -85,7 +85,7 @@ public class TrinoNessieCatalog
     {
         nessieClient.loadNamespaceMetadata(namespace);
         Map<String, Object> properties = propertiesByNamespace.get(namespace);
-        if (null == properties) {
+        if (properties == null) {
             return ImmutableMap.of();
         }
         return properties;
@@ -187,7 +187,7 @@ public class TrinoNessieCatalog
         String databaseLocation = null;
 
         Map<String, Object> properties = propertiesByNamespace.get(schemaTableName.getSchemaName());
-        if (null != properties) {
+        if (properties != null) {
             databaseLocation = (String) properties.get(IcebergSchemaProperties.LOCATION_PROPERTY);
         }
 
